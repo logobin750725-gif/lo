@@ -8,6 +8,7 @@ on:
       - 'DualAI/**'
       - 'DualAI.xcodeproj/**'
       - 'scripts/**'
+      - 'Tests/**'
       - '.github/workflows/build-ios.yml'
 
 permissions:
@@ -33,6 +34,7 @@ jobs:
             build/DualAI-unsigned.ipa
             build/SHA256.txt
             build/binary-info.txt
+            build/adapter-tests.log
           if-no-files-found: error
           retention-days: 7
       - name: Upload build log

@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build
+swiftc -swift-version 5 -parse-as-library DualAI/APIModels.swift DualAI/APITransport.swift DualAI/NativePipeline.swift Tests/AdapterTests.swift -o build/AdapterTests
+build/AdapterTests | tee build/adapter-tests.log
+plutil -lint DualAI.xcodeproj/project.pbxproj
 xcodebuild -version
 xcodebuild -project DualAI.xcodeproj -scheme DualAI -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData \
