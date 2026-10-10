@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102b29">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DualAI">
+  <meta name="description" content="把一個答案，交給更多角度檢驗。手機可操作的 DualAI 雙系統實驗室。">
+  <title>DualAI · 雙系統實驗室</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./engine.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a href="./" class="brand" aria-label="DualAI 首頁"><span class="brand-icon">D<span>×</span></span><span>DualAI <small>LAB / 01</small></span></a>
+    <div class="top-actions"><span class="status"><i></i><span id="connection">示範模式</span></span><button class="icon-btn" id="help" aria-label="使用與安裝說明">?</button></div>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow"><span></span> DUAL SYSTEMS, ONE QUESTION</p><h1>好的答案，<br>值得再被<span class="accent">挑戰一次。</span></h1><p class="lead">讓研究、質疑與驗證走在一起。<br class="mobile-br"> 看見答案，也看見它如何被修正。</p></div>
+      <div class="orbit" aria-hidden="true"><div class="orbit-line"></div><div class="orb orb-a">A<small>四角色</small></div><div class="orb orb-b">B<small>交叉審查</small></div><span class="orbit-star">✳</span><p>QUESTION → CRITIQUE → CLARITY</p></div>
+    </section>
+    <div class="workspace">
+      <section class="panel composer" aria-labelledby="composer-title">
+        <div class="panel-heading"><h2 id="composer-title">開始一場思考實驗</h2><span class="section-no">01 / INPUT</span></div>
+        <div class="system-tabs" role="tablist" aria-label="選擇分析系統">
+          <button role="tab" aria-selected="true" id="tab-a" data-system="A"><b>A</b><span>單模型 · 四角色<small>逐步研究與修正</small></span></button>
+          <button role="tab" aria-selected="false" id="tab-b" data-system="B"><b>B</b><span>多模型 · 交叉審查<small>獨立作答再互相挑戰</small></span></button>
+        </div>
+        <p id="system-note" class="system-note">四個角色共用一個模型；角色不同，不代表模型獨立。</p>
+        <label for="question" class="field-label">你想驗證什麼？ <span id="char-count">0 / 2000</span></label>
+        <textarea id="question" rows="4" maxlength="2000" placeholder="例如：計算 (2^10 + 3^5) mod 7" spellcheck="false"></textarea>
+        <div class="examples"><span>試試看</span><button data-example="mod">餘數挑戰 ↗</button><button data-example="handshake">握手問題 ↗</button><button data-example="sqrt">√2 的證明 ↗</button></div>
+        <div class="run-controls"><button class="primary" id="run"><span>開始分析</span><span>↗</span></button><button class="secondary" id="cancel" hidden>停止</button></div>
+        <p class="error" id="error" role="alert" hidden></p>
+        <div class="mode-note"><span class="mode-icon">◈</span><p id="mode-note"><strong>現在是示範模式</strong><br>算式由本機計算；角色對話為流程示例。沒有呼叫 AI，也不會產生 API 費用。</p></div>
+      </section>
+      <section class="panel output" aria-labelledby="output-title">
+        <div class="panel-heading"><h2 id="output-title">思考過程</h2><span class="section-no" id="progress-label">02 / PROCESS</span></div>
+        <div id="empty" class="empty"><div class="empty-icon"><span>?</span><i>✳</i></div><h3>一個問題，更多視角。</h3><p>選一個範例，觀察答案如何被提出、<br>挑戰，再留下站得住腳的結論。</p><div class="empty-roles"><span>研究</span><i>→</i><span>質疑</span><i>→</i><span>驗證</span></div></div>
+        <div id="timeline" class="timeline" aria-live="polite" aria-busy="false"></div>
+        <div id="result" hidden></div>
+      </section>
+    </div>
+    <section class="history-section" aria-labelledby="history-title"><div class="history-header"><div><p class="eyebrow">YOUR THINKING TRAIL</p><h2 id="history-title">最近的實驗 <span id="history-count">00</span></h2></div><button class="text-btn" id="clear-history" hidden>清除紀錄</button></div><div id="history" class="history-grid"></div><p id="storage-note" class="subtle">紀錄只保存在這台裝置的瀏覽器中。</p></section>
+    <footer><span>DualAI <b>／</b> 思考可以有分歧，過程應該透明。</span><span>手機版 · V1.1</span></footer>
+  </main>
+  <dialog id="help-dialog"><div class="dialog-header"><h2>DualAI 手機實驗室</h2><button class="icon-btn" id="close-help" aria-label="關閉說明">×</button></div><p>介面已內建在 App，可離線體驗。點「匯出 JSON」可開啟 iOS 分享介面，儲存到檔案或自行選擇分享方式。</p><h3>哪些是真的？</h3><p>示範模式的算式由瀏覽器計算；握手與 √2 使用明確標註的教學內容。角色對話、刻意放入的錯誤答案與流程動畫，都是示範，沒有 AI 參與。</p><h3>真實 AI 模式</h3><p id="api-help">此 iOS 版本提供離線示範模式，沒有連接真實 AI。真實 API 後端另附在手機網頁版下載包中，尚未整合至本 App。</p><h3>你的紀錄</h3><p>可重看與匯出 JSON。共用裝置請在使用後清除紀錄。瀏覽器清除資料也會移除紀錄。</p><button class="primary" id="got-it">開始實驗 ↗</button></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

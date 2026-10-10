@@ -1,0 +1,45 @@
+name: Build DualAI IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, dualai-ios]
+    paths:
+      - 'DualAI/**'
+      - 'DualAI.xcodeproj/**'
+      - 'scripts/**'
+      - '.github/workflows/build-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dualai-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned iPhone app
+        run: bash scripts/build-unsigned.sh
+      - name: Upload IPA and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: DualAI-unsigned-IPA
+          path: |
+            build/DualAI-unsigned.ipa
+            build/SHA256.txt
+            build/binary-info.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DualAI-build-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
