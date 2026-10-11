@@ -35,6 +35,7 @@ final class APIStore: ObservableObject {
     @Published private(set) var records: [String: ConnectionRecord] = [:]
     @Published var liveEnabled = false { didSet { persist() } }
     @Published var selectedA: String = "" { didSet { persist() } }
+    @Published var selectedJudge: String = "" { didSet { persist() } }
     @Published var testingID: UUID?
     var onChange: (() -> Void)?
     private let defaults = UserDefaults.standard
@@ -42,6 +43,7 @@ final class APIStore: ObservableObject {
     init() {
         if let data = defaults.data(forKey: "api.profiles.v2"), let value = try? JSONDecoder().decode([APIProfile].self, from: data) { profiles = value }
         if let data = defaults.data(forKey: "api.tests.v2"), let value = try? JSONDecoder().decode([String: ConnectionRecord].self, from: data) { records = value }
+        selectedJudge = defaults.string(forKey: "api.selectedJudge.v3") ?? ""
         selectedA = defaults.string(forKey: "api.selectedA.v2") ?? ""
         liveEnabled = defaults.bool(forKey: "api.liveEnabled.v2")
     }
@@ -49,6 +51,7 @@ final class APIStore: ObservableObject {
         if let data = try? JSONEncoder().encode(profiles) { defaults.set(data, forKey: "api.profiles.v2") }
         if let data = try? JSONEncoder().encode(records) { defaults.set(data, forKey: "api.tests.v2") }
         defaults.set(liveEnabled, forKey: "api.liveEnabled.v2")
+        defaults.set(selectedJudge, forKey: "api.selectedJudge.v3")
         defaults.set(selectedA, forKey: "api.selectedA.v2")
         onChange?()
     }
@@ -68,9 +71,11 @@ final class APIStore: ObservableObject {
         }
         records.removeValue(forKey: profile.id.uuidString)
         if selectedA.isEmpty { selectedA = profile.id.uuidString }
+        if selectedJudge.isEmpty && profile.provider == .gemini { selectedJudge = profile.id.uuidString }
         persist()
     }
     func delete(_ profile: APIProfile) {
+        if selectedJudge == profile.id.uuidString { selectedJudge = "" }
         APIKeychain.delete(profile.id)
         profiles.removeAll { $0.id == profile.id }
         records.removeValue(forKey: profile.id.uuidString)
@@ -88,6 +93,7 @@ final class APIStore: ObservableObject {
         let start = Date()
         defer { testingID = nil }
         do {
+            try FreeTrialPolicy.validate(profile)
             guard let key = APIKeychain.read(profile.id) else { throw APIError(message: "Keychain 內沒有此 API Key。") }
             let reply = try await APIAdapter().chat(profile: profile, key: key, prompt: "Reply with OK.", system: "This is a connection test. Reply briefly.", test: true)
             records[profile.id.uuidString] = ConnectionRecord(success: true, date: Date(), status: reply.httpStatus, latencyMS: reply.latencyMS,
@@ -99,7 +105,8 @@ final class APIStore: ObservableObject {
         persist()
     }
     func status() -> [String: Any] {
-        ["enabled": liveEnabled, "selectedA": selectedA,
+        ["enabled": liveEnabled, "selectedA": selectedA, "judgeReady": (try? judge()) != nil,
+         "judgeModel": profiles.first { $0.id.uuidString == selectedJudge }?.model ?? "未設定",
          "models": profiles.map { p -> [String: Any] in
              let record = self.record(for: p)
              return ["id": p.id.uuidString, "name": p.name, "provider": p.provider.title, "model": p.model,
@@ -107,12 +114,21 @@ final class APIStore: ObservableObject {
                      "lastTest": record.map { ISO8601DateFormatter().string(from: $0.date) } ?? ""]
          }]
     }
+    func judge() throws -> (APIProfile, String) {
+        guard let p = profiles.first(where: { $0.id.uuidString == selectedJudge }), p.provider == .gemini else { throw APIError(message: "請在 API 管理選擇 Gemini 獨立判官。") }
+        try FreeTrialPolicy.validate(p)
+        guard record(for: p)?.success == true, let key = APIKeychain.read(p.id) else { throw APIError(message: "請先測試 Gemini 判官連線。") }
+        return (p, key)
+    }
     func chosen(system: String) throws -> [(APIProfile, String)] {
         guard liveEnabled else { throw APIError(message: "尚未啟用真實 API 模式。") }
         let picked = system == "A" ? profiles.filter { $0.id.uuidString == selectedA } : profiles.filter(\.useForB)
         guard system == "A" ? picked.count == 1 : (2...6).contains(picked.count) else { throw APIError(message: "A 請選一個模型；B 請選 2 至 6 個模型。") }
+        let referee = try judge()
+        guard !picked.contains(where: { $0.identity == referee.0.identity }) else { throw APIError(message: "判官必須使用不同於回答者的模型。請取消 Gemini 判官的「參與系統 B」，A 請選 Groq。") }
         guard Set(picked.map(\.identity)).count == picked.count else { throw APIError(message: "同一端點與模型不能重複計為獨立模型。") }
         return try picked.map { p in
+            try FreeTrialPolicy.validate(p)
             guard let key = APIKeychain.read(p.id) else { throw APIError(message: "\(p.name) 尚未設定 Key。") }
             guard record(for: p)?.success == true else { throw APIError(message: "請先對 \(p.name) 執行並通過連線測試。") }
             return (p, key)

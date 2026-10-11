@@ -35,6 +35,7 @@ jobs:
             build/SHA256.txt
             build/binary-info.txt
             build/adapter-tests.log
+            build/web-tests.log
           if-no-files-found: error
           retention-days: 7
       - name: Upload build log

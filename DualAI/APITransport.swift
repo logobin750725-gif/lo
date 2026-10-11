@@ -53,10 +53,10 @@ struct APIAdapter {
         var url: URL
         var payload: [String: Any]
         switch profile.provider {
-        case .openai, .compatible:
+        case .groq, .openai, .compatible:
             url = base.appendingPathComponent("chat/completions")
             payload = ["model": profile.model, "messages": [["role": "system", "content": system], ["role": "user", "content": prompt]]]
-            if profile.provider == .openai { payload["max_completion_tokens"] = limit }
+            if profile.provider == .openai || profile.provider == .groq { payload["max_completion_tokens"] = limit }
             else { payload["max_tokens"] = limit }
         case .claude:
             url = base.appendingPathComponent("messages")
@@ -71,7 +71,7 @@ struct APIAdapter {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         switch profile.provider {
-        case .openai, .compatible: request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
+        case .groq, .openai, .compatible: request.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
         case .claude:
             request.setValue(key, forHTTPHeaderField: "x-api-key")
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
@@ -95,6 +95,7 @@ struct APIAdapter {
             let reason: String
             switch response.statusCode {
             case 401, 403: reason = "Key 無效、無權限，或服務拒絕存取。"
+            case 402: reason = "餘額不足或預算已用完；已停止，沒有改用其他模型。"
             case 404: reason = "模型或 API 路徑不存在。"
             case 429: reason = "額度不足或請求太頻繁。"
             case 300...399: reason = "服務要求重新導向；為避免將 Key 轉送其他端點，已停止。"
@@ -117,7 +118,7 @@ struct APIAdapter {
         var output: Int?
         var model = object["model"] as? String ?? "服務未回報（設定為 \(profile.model)）"
         switch profile.provider {
-        case .openai, .compatible:
+        case .groq, .openai, .compatible:
             if let choices = object["choices"] as? [[String: Any]], let message = choices.first?["message"] as? [String: Any] {
                 text = message["content"] as? String ?? ""
             }
@@ -133,7 +134,7 @@ struct APIAdapter {
         case .gemini:
             let candidates = object["candidates"] as? [[String: Any]] ?? []
             let content = candidates.first?["content"] as? [String: Any] ?? [:]
-            text = (content["parts"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: "\n")
+            text = (content["parts"] as? [[String: Any]] ?? []).filter { $0["thought"] as? Bool != true }.compactMap { $0["text"] as? String }.joined(separator: "\n")
             usage = object["usageMetadata"] as? [String: Any] ?? [:]
             input = usage["promptTokenCount"] as? Int
             output = usage["candidatesTokenCount"] as? Int

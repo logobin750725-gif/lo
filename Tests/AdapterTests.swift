@@ -11,7 +11,8 @@ final class FixtureTransport: APIHTTPTransport {
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
         let model = body["model"] as? String ?? "gemini-fixture"
         let messages = body["messages"] as? [[String: Any]] ?? []
-        let system = body["system"] as? String ?? messages.first?["content"] as? String ?? ""
+        let geminiSystem = ((body["systemInstruction"] as? [String: Any])?["parts"] as? [[String: Any]])?.first?["text"] as? String
+        let system = body["system"] as? String ?? messages.first?["content"] as? String ?? geminiSystem ?? ""
         let isJudge = system.contains("仲裁") || system.contains("綜合全部")
         let text = empty ? "" : "{\"answer\":\"\(isJudge ? "judge-result" : model + "-answer")\",\"evidence\":[\"fixture\"],\"issues\":[]}"
         let object: [String: Any]
@@ -44,7 +45,7 @@ struct AdapterTests {
             let request = fixture.requests[0]
             check(!(request.url!.absoluteString.contains("offline-only-test-key")), "key never appears in URL")
             switch provider {
-            case .openai, .compatible:
+            case .groq, .openai, .compatible:
                 check(request.url!.path.hasSuffix("/chat/completions"), "chat completions endpoint")
                 check(request.value(forHTTPHeaderField: "Authorization") == "Bearer offline-only-test-key", "bearer header")
             case .claude:
@@ -54,7 +55,7 @@ struct AdapterTests {
                 check(request.value(forHTTPHeaderField: "x-goog-api-key") == "offline-only-test-key", "Gemini key header")
                 check(request.url!.path.hasSuffix("account-model:generateContent"), "Gemini endpoint")
             }
-            for status in [401, 404, 429, 503, 302] {
+            for status in [401, 402, 404, 429, 503, 302] {
                 fixture.status = status
                 do {
                     _ = try await adapter.chat(profile: profile, key: "offline-only-test-key", prompt: "q", system: "s")
@@ -105,6 +106,21 @@ struct AdapterTests {
         catch is APIError {}
         let a = try await pipeline.run(question: "q", system: "A", credentials: [(p1, "key")])
         check((a["stats"] as! [String: Any])["calls"] as? Int == 5, "A runs all five stages")
+        let judge = APIProfile(name: "Gemini judge", provider: .gemini, model: "gemini-3.8-flash", useForB: false, freePlanConfirmed: true)
+        let judged = try await pipeline.run(question: "q", system: "B", credentials: [(p1, "key"), (p2, "key")], judge: (judge, "judge-secret"))
+        check(transport.requests.last!.url!.path.hasSuffix("gemini-3.8-flash:generateContent"), "final call uses separate Gemini endpoint")
+        check(transport.requests.last!.value(forHTTPHeaderField: "x-goog-api-key") == "judge-secret", "judge uses its own key")
+        check((judged["stats"] as! [String: Any])["models"] as? Int == 3, "independent judge included in model count")
+        check((judged["final"] as! [String: Any])["answer"] as? String == "judge-result", "Gemini judge result returned")
+        let before = transport.requests.count
+        do { _ = try await pipeline.run(question: "q", system: "A", credentials: [(p1, "key")], judge: (p1, "key")); fatalError("shared judge must fail") }
+        catch is APIError { check(transport.requests.count == before, "shared judge rejected before HTTP") }
+        try FreeTrialPolicy.validate(judge)
+        var unconfirmed = judge
+        unconfirmed.freePlanConfirmed = nil
+        do { try FreeTrialPolicy.validate(unconfirmed); fatalError("free plan confirmation required") } catch is APIError {}
+        let llama = APIProfile(name: "Llama", provider: .groq, model: "llama-3.3-70b-versatile", freePlanConfirmed: true)
+        do { try FreeTrialPolicy.validate(llama); fatalError("enterprise Llama is not a free preset") } catch is APIError {}
         print("PASS: \(count) adapters, actual HTTP request/reply fixtures, error and empty-response rejection, endpoint validation, peer exclusion, judge, complete usage, duplicate rejection and secret-free reports. No real API calls.")
     }
 }

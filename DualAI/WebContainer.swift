@@ -94,6 +94,11 @@ final class LabViewController: UIViewController, WKScriptMessageHandler, WKUIDel
               id.range(of: "^[A-Za-z0-9-]{1,80}$", options: .regularExpression) != nil,
               let action = object["action"] as? String else { return }
         switch action {
+        case "copyReview":
+            guard let payload = object["payload"] as? [String: Any], let text = payload["text"] as? String,
+                  text.utf8.count <= 500_000 else { reply(id, error: "審查資料太長。"); return }
+            UIPasteboard.general.setItems([[UIPasteboard.typeAutomatic: text]], options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(600)])
+            reply(id, data: ["copied": true])
         case "status": reply(id, data: apiStore.status())
         case "settings":
             guard analysisTask == nil else { reply(id, error: "分析中，請先停止再修改 API。"); return }
@@ -110,12 +115,13 @@ final class LabViewController: UIViewController, WKScriptMessageHandler, WKUIDel
             }
             do {
                 let credentials = try apiStore.chosen(system: system)
+                let judge = try apiStore.judge()
                 analysisID = id
                 analysisTask = Task { [weak self] in
                     guard let self = self else { return }
                     defer { self.analysisTask = nil; self.analysisID = nil }
                     do {
-                        let report = try await NativePipeline().run(question: question, system: system, credentials: credentials)
+                        let report = try await NativePipeline().run(question: question, system: system, credentials: credentials, judge: judge)
                         self.reply(id, data: report)
                     } catch is CancellationError {
                         self.reply(id, error: "已停止分析；供應商已接收的請求仍可能計費。")
